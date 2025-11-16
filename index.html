@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI自動テロップ生成（完全版）</title>
+
+<script type="importmap">
+{
+  "imports": {
+    "@xenova/transformers": "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2"
+  }
+}
+</script>
+
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+    margin: 0;
+    min-height: 100vh;
+  }
+  .container { 
+    max-width: 800px; 
+    margin: 0 auto; 
+    background: white;
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  h2 { 
+    color: #667eea; 
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 28px;
+  }
+  .upload-area {
+    border: 3px dashed #667eea;
+    border-radius: 12px;
+    padding: 30px;
+    text-align: center;
+    margin-bottom: 20px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .upload-area:hover {
+    background: #f5f7ff;
+    border-color: #764ba2;
+  }
+  .upload-area.dragover {
+    background: #e8ebff;
+    border-color: #5a67d8;
+  }
+  #file { display: none; }
+  .upload-label {
+    font-size: 16px;
+    color: #667eea;
+    font-weight: bold;
+  }
+  
+  .settings-panel {
+    background: #f5f7ff;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+    border: 1px solid #e0e7ff;
+  }
+  
+  .settings-panel h3 {
+    color: #667eea;
+    font-size: 16px;
+    margin-top: 0;
+    margin-bottom: 15px;
+  }
+  
+  .setting-row {
+    margin: 15px 0;
+  }
+  
+  .setting-row label {
+    display: block;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  
+  .setting-row select, .setting-row input[type="range"] {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e0e7ff;
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+  }
+  
+  .setting-row input[type="range"] {
+    padding: 0;
+  }
+  
+  .range-value {
+    display: inline-block;
+    margin-left: 10px;
+    font-weight: bold;
+    color: #667eea;
+  }
+  
+  #video, #outputVideo { 
+    width: 100%; 
+    border-radius: 12px; 
+    margin: 15px 0; 
+    display: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .btn {
+    width: 100%;
+    padding: 15px 24px; 
+    margin: 10px 0; 
+    font-size: 16px; 
+    border: none; 
+    border-radius: 10px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white; 
+    cursor: pointer; 
+    font-weight: bold;
+    transition: all 0.3s;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  }
+  .btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+  }
+  .btn:disabled { 
+    background: #ccc; 
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  #status {
+    margin: 15px 0;
+    padding: 15px;
+    background: #f5f7ff;
+    border-radius: 10px;
+    font-weight: 600;
+    color: #667eea;
+    text-align: center;
+    border-left: 4px solid #667eea;
+  }
+  .progress { 
+    width: 100%; 
+    height: 12px; 
+    background: #e8ebff; 
+    border-radius: 6px; 
+    margin: 15px 0; 
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .progress-bar { 
+    height: 100%; 
+    width: 0%; 
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    transition: width 0.3s;
+    border-radius: 6px;
+  }
+  #captions {
+    margin: 20px 0;
+    background: #f9fafb;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: left;
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid #e5e7eb;
+    display: none;
+  }
+  #captions h3 {
+    margin-top: 0;
+    color: #667eea;
+    font-size: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .caption-actions {
+    display: flex;
+    gap: 10px;
+  }
+  
+  .caption-action-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .btn-export-text {
+    background: #10b981;
+    color: white;
+  }
+  
+  .btn-export-text:hover {
+    background: #059669;
+  }
+  
+  .caption-line { 
+    padding: 15px;
+    margin: 10px 0;
+    background: white;
+    border-radius: 8px;
+    font-size: 14px;
+    border-left: 4px solid #667eea;
+    line-height: 1.6;
+    transition: all 0.2s;
+  }
+  .caption-line:hover {
+    background: #f5f7ff;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+  }
+  .timestamp { 
+    color: #764ba2; 
+    font-weight: bold;
+    font-size: 12px;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .caption-text {
+    color: #1a202c;
+    font-size: 15px;
+    line-height: 1.8;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
+  
+  .caption-text:hover {
+    background: #e8ebff;
+  }
+  
+  .caption-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e7eb;
+  }
+  
+  .caption-controls button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .btn-edit {
+    background: #667eea;
+    color: white;
+  }
+  
+  .btn-edit:hover {
+    background: #5a67d8;
+  }
+  
+  .btn-delete {
+    background: #ef4444;
+    color: white;
+  }
+  
+  .btn-delete:hover {
+    background: #dc2626;
+  }
+  
+  .edit-mode {
+    display: none;
+    margin-top: 10px;
+  }
+  
+  .edit-mode.active {
+    display: block;
+  }
+  
+  .edit-mode textarea {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    font-size: 14px;
+    margin: 10px 0;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.6;
+  }
+  
+  .time-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0;
+  }
+  
+  .time-inputs input {
+    padding: 8px;
+    border: 2px solid #e0e7ff;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  
+  .edit-mode-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  
+  .edit-mode-actions button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  
+  .btn-save {
+    background: #10b981;
+    color: white;
+  }
+  
+  .btn-save:hover {
+    background: #059669;
+  }
+  
+  .btn-cancel {
+    background: #6b7280;
+    color: white;
+  }
+  
+  .btn-cancel:hover {
+    background: #4b5563;
+  }
+  
+  .spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #667eea;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+    margin: 10px auto;
+    display: none;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .info-box {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 15px 0;
+    font-size: 13px;
+    color: #856404;
+  }
+  
+  .add-caption-btn {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 2px dashed #667eea;
+    border-radius: 8px;
+    background: white;
+    color: #667eea;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .add-caption-btn:hover {
+    background: #f5f7ff;
+    border-color: #764ba2;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h2>🎬 AI自動テロップ生成（完全版）</h2>
+  
+  <div class="upload-area" id="uploadArea">
+    <input type="file" id="file" accept="video/*">
+    <label for="file" class="upload-label">
+      📁 クリックまたはドラッグ＆ドロップで動画を選択
+    </label>
+  </div>
+
+  <div class="settings-panel">
+    <h3>⚙️ 文字起こし設定</h3>
+    
+    <div class="setting-row">
+      <label for="modelSelect">AIモデル（大きいほど高精度）:</label>
+      <select id="modelSelect">
+        <option value="Xenova/whisper-tiny">Tiny - 高速（39M）</option>
+        <option value="Xenova/whisper-base" selected>Base - バランス（74M）推奨</option>
+        <option value="Xenova/whisper-small">Small - 高精度（244M）</option>
+      </select>
+    </div>
+    
+    <div class="setting-row">
+      <label for="chunkLength">音声チャンク長 <span class="range-value" id="chunkValue">30秒</span>:</label>
+      <input type="range" id="chunkLength" min="10" max="60" value="30" step="5">
+    </div>
+    
+    <div class="setting-row">
+      <label for="strideLength">オーバーラップ <span class="range-value" id="strideValue">5秒</span>:</label>
+      <input type="range" id="strideLength" min="2" max="10" value="5" step="1">
+    </div>
+    
+    <div class="setting-row">
+      <label>
+        <input type="checkbox" id="useCondition" checked>
+        条件付き生成を有効化（精度向上）
+      </label>
+    </div>
+  </div>
+
+  <div class="info-box">
+    💡 <strong>ヒント:</strong> Baseモデルがおすすめ。生成後にテロップをクリックして編集できます。テロップは画面中央に表示されます。
+  </div>
+
+  <video id="video" controls></video>
+
+  <div id="status">準備中...</div>
+  <div class="spinner" id="spinner"></div>
+  <div class="progress"><div class="progress-bar" id="progress"></div></div>
+
+  <button id="gen" class="btn" disabled>🎯 テロップ生成</button>
+  <button id="export" class="btn" disabled>💾 テロップ付き動画を保存</button>
+
+  <div id="captions">
+    <h3>
+      <span>📝 生成されたテロップ</span>
+      <div class="caption-actions">
+        <button class="caption-action-btn btn-export-text" id="exportText">💾 テキスト保存</button>
+      </div>
+    </h3>
+    <div id="captionList"></div>
+    <button class="add-caption-btn" id="addCaption">➕ テロップを追加</button>
+  </div>
+
+  <video id="outputVideo" controls></video>
+</div>
+
+<script type="module">
+import { pipeline } from "@xenova/transformers";
+
+// ========== グローバル変数 ==========
+let transcriber, videoFile, audioBuffer, captions = [];
+const statusEl = document.getElementById("status");
+const progressEl = document.getElementById("progress");
+const spinnerEl = document.getElementById("spinner");
+const video = document.getElementById("video");
+const uploadArea = document.getElementById("uploadArea");
+const fileInput = document.getElementById("file");
+
+// ========== 設定値の監視 ==========
+document.getElementById("chunkLength").addEventListener("input", (e) => {
+  document.getElementById("chunkValue").textContent = e.target.value + "秒";
+});
+
+document.getElementById("strideLength").addEventListener("input", (e) => {
+  document.getElementById("strideValue").textContent = e.target.value + "秒";
+});
+
+// ========== ユーティリティ関数 ==========
+function updateStatus(message, showSpinner = false) {
+  statusEl.textContent = message;
+  spinnerEl.style.display = showSpinner ? "block" : "none";
+}
+
+function updateProgress(percent) {
+  progressEl.style.width = `${Math.min(percent, 100)}%`;
+}
+
+// ========== 1. AIモデル初期化 ==========
+updateStatus("AIモデルを読み込み中...", true);
+
+let modelLoaded = false;
+
+async function loadModel() {
+  if (modelLoaded) return;
+  
+  try {
+    const modelName = document.getElementById("modelSelect").value;
+    transcriber = await pipeline(
+      "automatic-speech-recognition",
+      modelName,
+      { 
+        quantized: true,
+        revision: 'main'
+      }
+    );
+    modelLoaded = true;
+    updateStatus("✅ 準備完了！動画を選択してください", false);
+    updateProgress(0);
+  } catch (err) {
+    console.error("モデル読み込みエラー:", err);
+    updateStatus("❌ AIモデルの読み込みに失敗しました", false);
+  }
+}
+
+// 初期化
+loadModel();
+
+// ========== 2. ドラッグ＆ドロップ対応 ==========
+uploadArea.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  uploadArea.classList.add("dragover");
+});
+
+uploadArea.addEventListener("dragleave", () => {
+  uploadArea.classList.remove("dragover");
+});
+
+uploadArea.addEventListener("drop", (e) => {
+  e.preventDefault();
+  uploadArea.classList.remove("dragover");
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    fileInput.files = files;
+    handleFileSelect(files[0]);
+  }
+});
+
+// ========== 3. ファイル選択処理（修正版）==========
+fileInput.addEventListener("change", (e) => {
+  if (e.target.files.length > 0) {
+    handleFileSelect(e.target.files[0]);
+  }
+});
+
+async function handleFileSelect(file) {
+  console.log("ファイル選択:", file.name);
+  videoFile = file;
+  
+  // 動画プレビュー
+  video.src = URL.createObjectURL(videoFile);
+  video.style.display = "block";
+  
+  updateStatus("音声を抽出中...", true);
+  updateProgress(10);
+  document.getElementById("gen").disabled = true;
+  document.getElementById("export").disabled = true;
+  document.getElementById("captions").style.display = "none";
+
+  try {
+    // 簡易的な音声抽出（固まる問題を回避）
+    audioBuffer = await extractAudioSimple(videoFile);
+    
+    updateStatus("✅ 音声抽出完了！「テロップ生成」ボタンを押してください", false);
+    updateProgress(100);
+    document.getElementById("gen").disabled = false;
+    
+  } catch (err) {
+    console.error("音声抽出エラー:", err);
+    updateStatus("❌ 音声抽出に失敗: " + err.message, false);
+    updateProgress(0);
+  }
+}
+
+// ========== 4. 簡易音声抽出（固まる問題を修正）==========
+async function extractAudioSimple(file) {
+  console.log("音声抽出開始");
+  
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.src = URL.createObjectURL(file);
+    
+    video.addEventListener('loadedmetadata', async () => {
+      console.log("メタデータ読み込み完了");
+      
+      try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // VideoをAudioContextに接続
+        const source = audioContext.createMediaElementSource(video);
+        const dest = audioContext.createMediaStreamDestination();
+        source.connect(dest);
+        
+        // 録音
+        const mediaRecorder = new MediaRecorder(dest.stream);
+        const chunks = [];
+        
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            chunks.push(e.data);
+          }
+        };
+        
+        mediaRecorder.onstop = async () => {
+          console.log("録音完了");
+          try {
+            const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            console.log("デコード完了");
+            resolve(audioBuffer);
+          } catch (e) {
+            console.error("デコードエラー:", e);
+            reject(new Error("音声デコードに失敗"));
+          }
+        };
+        
+        mediaRecorder.onerror = (e) => {
+          console.error("録音エラー:", e);
+          reject(new Error("音声録音に失敗"));
+        };
+        
+        // 録音開始
+        mediaRecorder.start();
+        console.log("録音開始");
+        
+        // 動画再生
+        await video.play();
+        console.log("動画再生開始");
+        
+        // 終了時に録音停止
+        video.onended = () => {
+          console.log("動画終了");
+          mediaRecorder.stop();
+          video.pause();
+        };
+        
+        // タイムアウト設定
+        const timeout = Math.min(video.duration * 1000 + 5000, 300000); // 最大5分
+        setTimeout(() => {
+          if (mediaRecorder.state === 'recording') {
+            console.log("タイムアウトで停止");
+            mediaRecorder.stop();
+            video.pause();
+          }
+        }, timeout);
+        
+      } catch (error) {
+        console.error("音声抽出エラー:", error);
+        reject(error);
+      }
+    });
+    
+    video.addEventListener('error', (e) => {
+      console.error("動画読み込みエラー:", e);
+      reject(new Error("動画の読み込みに失敗"));
+    });
+  });
+}
+
+// ========== 5. 高精度テロップ生成 ==========
+document.getElementById("gen").addEventListener("click", async () => {
+  if (!audioBuffer) {
+    alert("音声データがありません");
+    return;
+  }
+
+  const chunkLength = parseInt(document.getElementById("chunkLength").value);
+  const strideLength = parseInt(document.getElementById("strideLength").value);
+  const useCondition = document.getElementById("useCondition").checked;
+  const selectedModel = document.getElementById("modelSelect").value;
+
+  updateStatus("🤖 AI解析中...（モデルサイズにより1〜5分程度）", true);
+  updateProgress(0);
+  document.getElementById("gen").disabled = true;
+
+  try {
+    // モデル変更時は再読み込み
+    if (!transcriber || transcriber.model?.config?.name_or_path !== selectedModel) {
+      updateStatus("📦 新しいモデルを読み込み中...", true);
+      modelLoaded = false;
+      await loadModel();
+    }
+
+    updateStatus("🔄 音声を最適化中...", true);
+    const targetSampleRate = 16000;
+    const resampledBuffer = await resampleAudio(audioBuffer, targetSampleRate);
+    const audioData = resampledBuffer.getChannelData(0);
+
+    updateStatus("🤖 AI解析実行中...（進行中）", true);
+    
+    let currentProgress = 0;
+    const progressInterval = setInterval(() => {
+      currentProgress += 3;
+      if (currentProgress < 85) {
+        updateProgress(currentProgress);
+      }
+    }, 3000);
+
+    const result = await transcriber(audioData, {
+      chunk_length_s: chunkLength,
+      stride_length_s: strideLength,
+      language: "japanese",
+      task: "transcribe",
+      return_timestamps: "word",
+      condition_on_previous_text: useCondition,
+      compression_ratio_threshold: 1.8,
+      logprob_threshold: -0.8,
+      no_speech_threshold: 0.5
+    });
+
+    clearInterval(progressInterval);
+    updateProgress(100);
+
+    captions = processTranscriptionResults(result);
+    
+    if (captions.length === 0) {
+      updateStatus("⚠️ テロップが生成されませんでした（音声が検出されなかった可能性）", false);
+      document.getElementById("gen").disabled = false;
+      return;
+    }
+    
+    displayCaptions(captions);
+    updateStatus(`✅ テロップ生成完了！（${captions.length}件）`, false);
+    document.getElementById("export").disabled = false;
+
+  } catch (err) {
+    console.error("AI解析エラー:", err);
+    updateStatus("❌ AI解析に失敗: " + err.message, false);
+    updateProgress(0);
+    document.getElementById("gen").disabled = false;
+  }
+});
+
+// ========== 6. トランスクリプション結果の処理 ==========
+function processTranscriptionResults(result) {
+  const chunks = result.chunks || [];
+  const processedCaptions = [];
+  
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const text = chunk.text.trim();
+    
+    if (!text || text.length < 2) continue;
+    
+    if (i > 0 && text === processedCaptions[processedCaptions.length - 1]?.text) {
+      continue;
+    }
+    
+    let startTime = chunk.timestamp[0];
+    let endTime = chunk.timestamp[1];
+    
+    if (startTime === null) startTime = i > 0 ? processedCaptions[i-1].timestamp[1] : 0;
+    if (endTime === null) endTime = startTime + 3;
+    
+    processedCaptions.push({
+      text: text,
+      timestamp: [startTime, endTime]
+    });
+  }
+  
+  return processedCaptions;
+}
+
+// ========== 7. 音声リサンプリング ==========
+async function resampleAudio(audioBuffer, targetSampleRate) {
+  const offlineCtx = new OfflineAudioContext(
+    1,
+    audioBuffer.duration * targetSampleRate,
+    targetSampleRate
+  );
+  
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start(0);
+  
+  return await offlineCtx.startRendering();
+}
+
+// ========== 8. テロップ表示（完全編集機能付き）==========
+function displayCaptions(captions) {
+  const list = document.getElementById("captionList");
+  list.innerHTML = "";
+  
+  captions.forEach((c, index) => {
+    const div = createCaptionElement(c, index);
+    list.appendChild(div);
+  });
+  
+  document.getElementById("captions").style.display = "block";
+}
+
+function createCaptionElement(caption, index) {
+  const div = document.createElement("div");
+  div.className = "caption-line";
+  div.dataset.index = index;
+  
+  div.innerHTML = `
+    <span class="timestamp">${index + 1}. ${formatTime(caption.timestamp[0])} → ${formatTime(caption.timestamp[1])}</span>
+    <div class="caption-text">${escapeHtml(caption.text)}</div>
+    
+    <div class="caption-controls">
+      <button class="btn-edit">✏️ 編集</button>
+      <button class="btn-delete">🗑️ 削除</button>
+    </div>
+    
+    <div class="edit-mode">
+      <textarea class="edit-textarea">${escapeHtml(caption.text)}</textarea>
+      <div class="time-inputs">
+        <input type="number" class="edit-start" placeholder="開始時間（秒）" value="${caption.timestamp[0].toFixed(1)}" step="0.1">
+        <input type="number" class="edit-end" placeholder="終了時間（秒）" value="${caption.timestamp[1].toFixed(1)}" step="0.1">
+      </div>
+      <div class="edit-mode-actions">
+        <button class="btn-save">💾 保存</button>
+        <button class="btn-cancel">❌ キャンセル</button>
+      </div>
+    </div>
+  `;
+  
+  const captionText = div.querySelector('.caption-text');
+  const editMode = div.querySelector('.edit-mode');
+  const editBtn = div.querySelector('.btn-edit');
+  const deleteBtn = div.querySelector('.btn-delete');
+  const saveBtn = div.querySelector('.btn-save');
+  const cancelBtn = div.querySelector('.btn-cancel');
+  const textarea = div.querySelector('.edit-textarea');
+  const startInput = div.querySelector('.edit-start');
+  const endInput = div.querySelector('.edit-end');
+  
+  // 編集モード
+  editBtn.addEventListener('click', () => {
+    editMode.classList.add('active');
+    captionText.style.display = 'none';
+    div.querySelector('.caption-controls').style.display = 'none';
+    textarea.focus();
+  });
+  
+  // 保存
+  saveBtn.addEventListener('click', () => {
+    const newText = textarea.value.trim();
+    const newStart = parseFloat(startInput.value);
+    const newEnd = parseFloat(endInput.value);
+    
+    if (newText && !isNaN(newStart) && !isNaN(newEnd) && newStart < newEnd) {
+      captions[index].text = newText;
+      captions[index].timestamp = [newStart, newEnd];
+      
+      captionText.textContent = newText;
+      div.querySelector('.timestamp').textContent = 
+        `${index + 1}. ${formatTime(newStart)} → ${formatTime(newEnd)}`;
+      
+      editMode.classList.remove('active');
+      captionText.style.display = 'block';
+      div.querySelector('.caption-controls').style.display = 'flex';
+    } else {
+      alert('正しい値を入力してください');
+    }
+  });
+  
+  // キャンセル
+  cancelBtn.addEventListener('click', () => {
+    textarea.value = captions[index].text;
+    startInput.value = captions[index].timestamp[0].toFixed(1);
+    endInput.value = captions[index].timestamp[1].toFixed(1);
+    
+    editMode.classList.remove('active');
+    captionText.style.display = 'block';
+    div.querySelector('.caption-controls').style.display = 'flex';
+  });
+  
+  // 削除
+  deleteBtn.addEventListener('click', () => {
+    if (confirm('このテロップを削除しますか？')) {
+      captions.splice(index, 1);
+      displayCaptions(captions);
+    }
+  });
+  
+  return div;
+}
+
+// ========== 9. テロップ追加 ==========
+document.getElementById("addCaption").addEventListener("click", () => {
+  const lastCaption = captions[captions.length - 1];
+  const newStart = lastCaption ? lastCaption.timestamp[1] : 0;
+  const newEnd = newStart + 3;
+  
+  captions.push({
+    text: "新しいテロップ",
+    timestamp: [newStart, newEnd]
+  });
+  
+  displayCaptions(captions);
+});
+
+// ========== 10. テキスト保存 ==========
+document.getElementById("exportText").addEventListener("click", () => {
+  const text = captions.map((c, i) => 
+    `${i + 1}. [${formatTime(c.timestamp[0])} - ${formatTime(c.timestamp[1])}]\n${c.text}\n`
+  ).join('\n');
+  
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'テロップ.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+function formatTime(sec) {
+  if (sec == null || isNaN(sec)) return "0:00.0";
+  const m = Math.floor(sec / 60);
+  const s = (sec % 60).toFixed(1);
+  return `${m}:${s.padStart(4, '0')}`;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ========== 11. 動画合成（中央表示）==========
+document.getElementById("export").addEventListener("click", async () => {
+  updateStatus("🎬 テロップ付き動画を生成中...", true);
+  document.getElementById("export").disabled = true;
+  updateProgress(0);
+
+  try {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    
+    const videoEl = document.createElement("video");
+    videoEl.src = URL.createObjectURL(videoFile);
+    videoEl.muted = false;
+    
+    await new Promise((resolve, reject) => {
+      videoEl.onloadedmetadata = resolve;
+      videoEl.onerror = reject;
+    });
+    
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    
+    const stream = canvas.captureStream(30);
+    
+    // 音声トラックを追加
+    const audioCtx = new AudioContext();
+    const source = audioCtx.createMediaElementSource(videoEl);
+    const dest = audioCtx.createMediaStreamDestination();
+    source.connect(dest);
+    source.connect(audioCtx.destination);
+    
+    dest.stream.getAudioTracks().forEach(track => {
+      stream.addTrack(track);
+    });
+    
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') 
+      ? 'video/webm;codecs=vp9,opus' 
+      : 'video/webm';
+    
+    const recorder = new MediaRecorder(stream, { 
+      mimeType,
+      videoBitsPerSecond: 3000000
+    });
+    
+    const chunks = [];
+    
+    recorder.ondataavailable = e => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      
+      const outputVideo = document.getElementById("outputVideo");
+      outputVideo.src = url;
+      outputVideo.style.display = "block";
+      
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `テロップ付き_${videoFile.name.replace(/\.[^/.]+$/, "")}.webm`;
+      a.click();
+      
+      updateStatus("✅ 完成！動画をダウンロードしました", false);
+      updateProgress(100);
+      document.getElementById("export").disabled = false;
+    };
+    
+    const render = () => {
+      if (videoEl.ended || videoEl.paused) {
+        recorder.stop();
+        return;
+      }
+      
+      const progress = (videoEl.currentTime / videoEl.duration) * 100;
+      updateProgress(progress);
+      
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      
+      const t = videoEl.currentTime;
+      const cap = captions.find(c => 
+        c.timestamp[0] !== null && 
+        c.timestamp[1] !== null &&
+        t >= c.timestamp[0] && 
+        t <= c.timestamp[1]
+      );
+      
+      if (cap) {
+        drawCaptionCenter(ctx, cap.text, canvas.width, canvas.height);
+      }
+      
+      requestAnimationFrame(render);
+    };
+    
+    recorder.start();
+    videoEl.play();
+    requestAnimationFrame(render);
+    
+  } catch (err) {
+    console.error("動画生成エラー:", err);
+    updateStatus("❌ 動画生成に失敗: " + err.message, false);
+    document.getElementById("export").disabled = false;
+  }
+});
+
+// ========== 12. テロップ描画（中央表示）==========
+function drawCaptionCenter(ctx, text, width, height) {
+  const fontSize = Math.max(32, width / 20);
+  const padding = fontSize * 0.8;
+  const lineHeight = fontSize * 1.5;
+  
+  const maxWidth = width * 0.8;
+  const lines = wrapText(ctx, text, maxWidth, fontSize);
+  
+  const boxHeight = lineHeight * lines.length + padding * 2;
+  const boxY = (height - boxHeight) / 2; // 中央配置
+  
+  // グラデーション背景
+  const gradient = ctx.createLinearGradient(0, boxY, 0, boxY + boxHeight);
+  gradient.addColorStop(0, "rgba(0, 0, 0, 0.85)");
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0.75)");
+  ctx.fillStyle = gradient;
+  
+  // 角丸の背景
+  ctx.beginPath();
+  const borderRadius = 15;
+  ctx.moveTo(borderRadius, boxY);
+  ctx.lineTo(width - borderRadius, boxY);
+  ctx.quadraticCurveTo(width, boxY, width, boxY + borderRadius);
+  ctx.lineTo(width, boxY + boxHeight - borderRadius);
+  ctx.quadraticCurveTo(width, boxY + boxHeight, width - borderRadius, boxY + boxHeight);
+  ctx.lineTo(borderRadius, boxY + boxHeight);
+  ctx.quadraticCurveTo(0, boxY + boxHeight, 0, boxY + boxHeight - borderRadius);
+  ctx.lineTo(0, boxY + borderRadius);
+  ctx.quadraticCurveTo(0, boxY, borderRadius, boxY);
+  ctx.closePath();
+  ctx.fill();
+  
+  // テキスト描画
+  ctx.font = `bold ${fontSize}px "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  
+  lines.forEach((line, i) => {
+    const y = boxY + padding + i * lineHeight;
+    
+    // 黒い縁取り
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = fontSize / 10;
+    ctx.lineJoin = "round";
+    ctx.strokeText(line, width / 2, y);
+    
+    // 白いテキスト
+    ctx.fillStyle = "white";
+    ctx.fillText(line, width / 2, y);
+  });
+}
+
+function wrapText(ctx, text, maxWidth, fontSize) {
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  const chars = text.split('');
+  const lines = [];
+  let currentLine = '';
+  
+  for (let i = 0; i < chars.length; i++) {
+    const testLine = currentLine + chars[i];
+    const metrics = ctx.measureText(testLine);
+    
+    if (metrics.width > maxWidth && currentLine !== '') {
+      lines.push(currentLine);
+      currentLine = chars[i];
+    } else {
+      currentLine = testLine;
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  
+  return lines.length > 0 ? lines : [text];
+}
+
+</script>
+</body>
+</html>
